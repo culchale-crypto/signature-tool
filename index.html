@@ -68,7 +68,12 @@ body::before{
   overflow:hidden;
 }
 
-canvas{ width:100%; display:block; }
+/* ✅ 手機關鍵：避免滑動事件影響點擊/清除 */
+canvas{
+  width:100%;
+  display:block;
+  touch-action:none;
+}
 
 .preview{
   display:grid;
@@ -76,7 +81,7 @@ canvas{ width:100%; display:block; }
   gap:12px;
 }
 
-/* 手機：預覽改一欄，避免三欄硬塞造成擠在一起 */
+/* ✅ 手機：預覽改一欄，避免三欄硬塞 */
 @media (max-width: 720px){
   .preview{ grid-template-columns: 1fr; }
 }
@@ -117,7 +122,6 @@ button{
 }
 
 .controlRow label{ font-weight:700; }
-
 input[type=range]{ width:100%; }
 
 .valueBox{
@@ -127,7 +131,6 @@ input[type=range]{ width:100%; }
   padding:6px 0;
   font-weight:800;
 }
-
 </style>
 </head>
 
@@ -167,7 +170,7 @@ input[type=range]{ width:100%; }
   <div class="card">
     <h2>請簽名</h2>
     <div class="signArea"><canvas id="sign" height="230"></canvas></div>
-    <button class="clear" onclick="clearAll()">清除重簽</button>
+    <button type="button" class="clear" id="clearBtn">清除重簽</button>
   </div>
 
   <div class="card">
@@ -177,19 +180,19 @@ input[type=range]{ width:100%; }
       <div class="previewCard">
         鋼筆
         <div class="signArea"><canvas id="pen" height="180"></canvas></div>
-        <button class="dl" onclick="download('pen')">下載鋼筆</button>
+        <button type="button" class="dl" onclick="download('pen')">下載鋼筆</button>
       </div>
 
       <div class="previewCard">
         毛筆
         <div class="signArea"><canvas id="brush" height="180"></canvas></div>
-        <button class="dl" onclick="download('brush')">下載毛筆</button>
+        <button type="button" class="dl" onclick="download('brush')">下載毛筆</button>
       </div>
 
       <div class="previewCard">
         手寫
         <div class="signArea"><canvas id="hand" height="180"></canvas></div>
-        <button class="dl" onclick="download('hand')">下載手寫</button>
+        <button type="button" class="dl" onclick="download('hand')">下載手寫</button>
       </div>
 
     </div>
@@ -201,7 +204,6 @@ input[type=range]{ width:100%; }
 /* =========================
    粗度倍率（數值顯示）
    ========================= */
-
 let penFactor=1;
 let brushFactor=1;
 let handFactor=1;
@@ -221,7 +223,6 @@ function bindRange(range,valBox,setter){
     renderAll();
   }
 }
-
 bindRange(penRange,penVal,v=>penFactor=v);
 bindRange(brushRange,brushVal,v=>brushFactor=v);
 bindRange(handRange,handVal,v=>handFactor=v);
@@ -229,7 +230,6 @@ bindRange(handRange,handVal,v=>handFactor=v);
 /* =========================
    畫布
    ========================= */
-
 const sign=document.getElementById("sign");
 const pen=document.getElementById("pen");
 const brush=document.getElementById("brush");
@@ -243,6 +243,7 @@ const hctx=hand.getContext("2d");
 let strokes=[];
 let current=null;
 let drawing=false;
+let activePointerId=null;
 
 function resize(){
   sign.width=sign.clientWidth;
@@ -251,120 +252,186 @@ function resize(){
   hand.width=hand.clientWidth;
   renderAll();
 }
-window.onresize=resize;
+window.addEventListener("resize", resize);
 resize();
 
-function pos(e){
+/* ✅ Pointer Events（手機/電腦一致） */
+function pointerPos(e){
   const r=sign.getBoundingClientRect();
-  const p=e.touches?e.touches[0]:e;
-  return {x:p.clientX-r.left,y:p.clientY-r.top,t:Date.now()};
+  return {x:e.clientX-r.left, y:e.clientY-r.top, t:Date.now()};
 }
 
-sign.onmousedown=e=>{drawing=true;current=[pos(e)];strokes.push(current)};
-sign.onmousemove=e=>{if(!drawing)return;current.push(pos(e));renderAll()};
-window.onmouseup=()=>drawing=false;
+sign.addEventListener("pointerdown", (e)=>{
+  e.preventDefault();
+  // 只接受主按/第一指
+  sign.setPointerCapture(e.pointerId);
+  activePointerId = e.pointerId;
+  drawing=true;
+  current=[pointerPos(e)];
+  strokes.push(current);
+  renderAll();
+});
 
-sign.ontouchstart=e=>{drawing=true;current=[pos(e)];strokes.push(current)};
-sign.ontouchmove=e=>{e.preventDefault();if(!drawing)return;current.push(pos(e));renderAll()};
-window.ontouchend=()=>drawing=false;
+sign.addEventListener("pointermove", (e)=>{
+  if(!drawing) return;
+  if(activePointerId !== null && e.pointerId !== activePointerId) return;
+  e.preventDefault();
+  current.push(pointerPos(e));
+  renderAll();
+});
 
-function clearAll(){strokes=[];renderAll()}
+function endPointer(e){
+  // 允許在任何地方結束，避免 iPhone 漏掉 canvas 上的 up
+  if(activePointerId !== null && e.pointerId !== undefined && e.pointerId !== activePointerId) return;
 
+  drawing=false;
+  try{
+    if(activePointerId !== null) sign.releasePointerCapture(activePointerId);
+  }catch(_){}
+  activePointerId=null;
+}
+sign.addEventListener("pointerup", endPointer);
+sign.addEventListener("pointercancel", endPointer);
+sign.addEventListener("pointerleave", endPointer);
+
+// ✅ 全頁保險：iPhone 有時 up 不回到 canvas
+document.addEventListener("pointerup", endPointer, true);
+document.addEventListener("pointercancel", endPointer, true);
+
+/* ✅ 清除（iPhone Safari 最穩：用 pointerdown + touchstart） */
+function clearAll(){
+  try{
+    if(activePointerId !== null) sign.releasePointerCapture(activePointerId);
+  }catch(_){}
+
+  strokes=[];
+  current=null;
+  drawing=false;
+  activePointerId=null;
+  renderAll();
+}
+
+const clearBtn=document.getElementById("clearBtn");
+clearBtn.addEventListener("pointerdown", (e)=>{
+  e.preventDefault();
+  clearAll();
+});
+clearBtn.addEventListener("touchstart", (e)=>{
+  e.preventDefault();
+  clearAll();
+}, { passive:false });
+clearBtn.addEventListener("click", clearAll);
+
+/* =========================
+   繪圖工具
+   ========================= */
 function clear(ctx,w,h){ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h)}
 
 function bbox(){
-let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9
-for(const s of strokes)
-for(const p of s){
-minX=Math.min(minX,p.x)
-minY=Math.min(minY,p.y)
-maxX=Math.max(maxX,p.x)
-maxY=Math.max(maxY,p.y)}
-if(minX===1e9)return null
-return{minX,minY,maxX,maxY}
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  for(const s of strokes){
+    for(const p of s){
+      minX=Math.min(minX,p.x);
+      minY=Math.min(minY,p.y);
+      maxX=Math.max(maxX,p.x);
+      maxY=Math.max(maxY,p.y);
+    }
+  }
+  if(minX===1e9)return null;
+  return{minX,minY,maxX,maxY};
 }
 
 /* =========================
    筆觸模型（倍率控制）
    ========================= */
-
 function penWidth(speed){
-const pressure=1/(1+speed*1.2)
-return (0.8+pressure*3.5)*penFactor
+  const pressure=1/(1+speed*1.2);
+  return (0.8+pressure*3.5)*penFactor;
 }
-
-function handWidth(){
-return 3.5*handFactor
-}
-
+function handWidth(){ return 3.5*handFactor; }
 function brushWidth(i,len){
-const p=i/Math.max(1,len-1)
-return (2+Math.sin(Math.PI*p)*15)*brushFactor
+  const p=i/Math.max(1,len-1);
+  return (2+Math.sin(Math.PI*p)*15)*brushFactor;
 }
 
 function draw(ctx,canvas,mode){
-clear(ctx,canvas.width,canvas.height)
-const b=bbox();if(!b)return
-const pad=22
-const w=canvas.width-pad*2
-const h=canvas.height-pad*2
-const bw=b.maxX-b.minX
-const bh=b.maxY-b.minY
-const scale=Math.min(w/bw,h/bh)
-const contentW = bw * scale;
-const contentH = bh * scale;
+  clear(ctx,canvas.width,canvas.height);
+  const b=bbox(); if(!b) return;
 
-// 置中（避免手機預覽縮小後擠在左上角）
-const dx = (canvas.width  - contentW) / 2 - b.minX * scale;
-const dy = (canvas.height - contentH) / 2 - b.minY * scale;
-ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#000"
-for(const s of strokes)
-for(let i=1;i<s.length;i++){
-const p0=s[i-1];const p1=s[i]
-const speed=Math.hypot(p1.x-p0.x,p1.y-p0.y)/Math.max(1,p1.t-p0.t)*18
-let lw
-if(mode==="pen")lw=penWidth(speed)
-else if(mode==="hand")lw=handWidth()
-else lw=brushWidth(i,s.length)
-let minPx=2
-if(mode==="pen")minPx=0.8
-if(mode==="hand")minPx=3
-ctx.lineWidth=Math.max(lw*scale,minPx)
-ctx.beginPath()
-ctx.moveTo(p0.x*scale+dx,p0.y*scale+dy)
-ctx.lineTo(p1.x*scale+dx,p1.y*scale+dy)
-ctx.stroke()
-}
+  const pad=22;
+  const w=canvas.width-pad*2;
+  const h=canvas.height-pad*2;
+  const bw=b.maxX-b.minX;
+  const bh=b.maxY-b.minY;
+
+  const scale=Math.min(w/bw,h/bh);
+
+  // ✅ 置中（避免手機預覽縮小後擠在左上角）
+  const contentW = bw * scale;
+  const contentH = bh * scale;
+  const dx = (canvas.width  - contentW) / 2 - b.minX * scale;
+  const dy = (canvas.height - contentH) / 2 - b.minY * scale;
+
+  ctx.lineCap="round";
+  ctx.lineJoin="round";
+  ctx.strokeStyle="#000";
+
+  for(const s of strokes){
+    for(let i=1;i<s.length;i++){
+      const p0=s[i-1], p1=s[i];
+      const speed=Math.hypot(p1.x-p0.x,p1.y-p0.y)/Math.max(1,p1.t-p0.t)*18;
+
+      let lw;
+      if(mode==="pen") lw=penWidth(speed);
+      else if(mode==="hand") lw=handWidth();
+      else lw=brushWidth(i,s.length);
+
+      let minPx=2;
+      if(mode==="pen") minPx=0.8;
+      if(mode==="hand") minPx=3;
+
+      ctx.lineWidth=Math.max(lw*scale,minPx);
+
+      ctx.beginPath();
+      ctx.moveTo(p0.x*scale+dx, p0.y*scale+dy);
+      ctx.lineTo(p1.x*scale+dx, p1.y*scale+dy);
+      ctx.stroke();
+    }
+  }
 }
 
 function renderAll(){
-clear(sctx,sign.width,sign.height)
-sctx.strokeStyle="#000";sctx.lineWidth=2
-for(const s of strokes){
-if(s.length<2)continue
-sctx.beginPath()
-sctx.moveTo(s[0].x,s[0].y)
-for(let i=1;i<s.length;i++)sctx.lineTo(s[i].x,s[i].y)
-sctx.stroke()
-}
-draw(pctx,pen,"pen")
-draw(bctx,brush,"brush")
-draw(hctx,hand,"hand")
+  clear(sctx,sign.width,sign.height);
+  sctx.strokeStyle="#000";
+  sctx.lineWidth=2;
+
+  for(const s of strokes){
+    if(s.length<2) continue;
+    sctx.beginPath();
+    sctx.moveTo(s[0].x,s[0].y);
+    for(let i=1;i<s.length;i++) sctx.lineTo(s[i].x,s[i].y);
+    sctx.stroke();
+  }
+
+  draw(pctx,pen,"pen");
+  draw(bctx,brush,"brush");
+  draw(hctx,hand,"hand");
 }
 
 function download(mode){
-const c=document.createElement("canvas")
-c.width=2400;c.height=1400
-const ctx=c.getContext("2d")
-clear(ctx,c.width,c.height)
-draw(ctx,c,mode)
-const a=document.createElement("a")
-a.href=c.toDataURL()
-a.download="sign.png"
-a.click()
+  const c=document.createElement("canvas");
+  c.width=2400; c.height=1400;
+  const ctx=c.getContext("2d");
+  clear(ctx,c.width,c.height);
+  draw(ctx,c,mode);
+
+  const a=document.createElement("a");
+  a.href=c.toDataURL();
+  a.download=`sign_${mode}.png`;
+  a.click();
 }
 
-renderAll()
+renderAll();
 </script>
 </body>
 </html>
