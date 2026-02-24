@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>初心畫具｜線上簽名</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;800&display=swap" rel="stylesheet">
+
+<style>
+:root{ --card:#ffffff12; --card2:#ffffff0f; }
+
+body{
+  margin:0;
+  padding:26px 16px;
+  font-family:"Noto Sans TC", system-ui, sans-serif;
+  color:#fff;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255,140,220,.22), transparent 40%),
+    radial-gradient(circle at 85% 18%, rgba(130,220,255,.22), transparent 42%),
+    radial-gradient(circle at 50% 88%, rgba(180,140,255,.22), transparent 45%),
+    linear-gradient(180deg,#1b1033,#0a0718);
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,.9), transparent),
+    radial-gradient(2px 2px at 25% 72%, rgba(255,255,255,.85), transparent),
+    radial-gradient(1px 1px at 45% 35%, rgba(255,255,255,.75), transparent),
+    radial-gradient(2px 2px at 63% 62%, rgba(255,255,255,.8), transparent);
+  opacity:.35;
+}
+
+.container{ max-width:980px; margin:0 auto; }
+
+.header{
+  background:linear-gradient(135deg, rgba(255,122,223,.18), rgba(124,199,255,.18));
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:18px;
+  padding:14px 16px;
+  box-shadow:0 16px 50px rgba(0,0,0,.35);
+  backdrop-filter: blur(14px);
+  margin-bottom:14px;
+}
+
+.brandRow{ display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+.brand{ font-weight:800; font-size:20px; }
+.title{ font-weight:800; font-size:22px; }
+.warn{ margin-top:8px; font-size:13px; opacity:.9; }
+
+.card{
+  background:var(--card);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:18px;
+  padding:16px;
+  box-shadow:0 16px 50px rgba(0,0,0,.32);
+  backdrop-filter: blur(14px);
+  margin-bottom:14px;
+}
+
+.signArea{
+  background:#fff;
+  border:2px dashed rgba(90,90,120,.55);
+  border-radius:14px;
+  overflow:hidden;
+}
+
+canvas{ width:100%; display:block; }
+
+.preview{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+}
+
+.previewCard{
+  background:var(--card2);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:16px;
+  padding:12px;
+}
+
+button{
+  border:none;
+  border-radius:12px;
+  padding:11px 14px;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.clear{
+  background:linear-gradient(135deg,#ff7adf,#7cc7ff);
+  color:#000;
+}
+
+.dl{
+  width:100%;
+  background:#000;
+  color:#fff;
+  margin-top:8px;
+}
+
+.controlRow{
+  display:grid;
+  grid-template-columns:1fr 80px;
+  align-items:center;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.controlRow label{ font-weight:700; }
+
+input[type=range]{ width:100%; }
+
+.valueBox{
+  text-align:center;
+  background:#000;
+  border-radius:8px;
+  padding:6px 0;
+  font-weight:800;
+}
+
+</style>
+</head>
+
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="brandRow">
+      <div class="brand">初心畫具</div>
+      <div class="title">線上手寫簽名（600 DPI PNG）</div>
+    </div>
+    <div class="warn">⚠ 本工具為初心畫具製版用，請勿下載商用。</div>
+  </div>
+
+  <div class="card">
+    <h3>筆畫粗度調整（數值即時顯示）</h3>
+
+    <div class="controlRow">
+      <label>鋼筆粗度倍率</label>
+      <div class="valueBox" id="penVal">1.0</div>
+      <input type="range" min="0.4" max="3" step="0.1" value="1" id="penRange">
+    </div>
+
+    <div class="controlRow">
+      <label>毛筆粗度倍率</label>
+      <div class="valueBox" id="brushVal">1.0</div>
+      <input type="range" min="0.4" max="3" step="0.1" value="1" id="brushRange">
+    </div>
+
+    <div class="controlRow">
+      <label>手寫粗度倍率</label>
+      <div class="valueBox" id="handVal">1.0</div>
+      <input type="range" min="0.4" max="3" step="0.1" value="1" id="handRange">
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>請簽名</h2>
+    <div class="signArea"><canvas id="sign" height="230"></canvas></div>
+    <button class="clear" onclick="clearAll()">清除重簽</button>
+  </div>
+
+  <div class="card">
+    <h2>預覽</h2>
+    <div class="preview">
+
+      <div class="previewCard">
+        鋼筆
+        <div class="signArea"><canvas id="pen" height="180"></canvas></div>
+        <button class="dl" onclick="download('pen')">下載鋼筆</button>
+      </div>
+
+      <div class="previewCard">
+        毛筆
+        <div class="signArea"><canvas id="brush" height="180"></canvas></div>
+        <button class="dl" onclick="download('brush')">下載毛筆</button>
+      </div>
+
+      <div class="previewCard">
+        手寫
+        <div class="signArea"><canvas id="hand" height="180"></canvas></div>
+        <button class="dl" onclick="download('hand')">下載手寫</button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* =========================
+   粗度倍率（數值顯示）
+   ========================= */
+
+let penFactor=1;
+let brushFactor=1;
+let handFactor=1;
+
+const penRange=document.getElementById("penRange");
+const brushRange=document.getElementById("brushRange");
+const handRange=document.getElementById("handRange");
+
+const penVal=document.getElementById("penVal");
+const brushVal=document.getElementById("brushVal");
+const handVal=document.getElementById("handVal");
+
+function bindRange(range,valBox,setter){
+  range.oninput=()=>{
+    valBox.textContent=range.value;
+    setter(parseFloat(range.value));
+    renderAll();
+  }
+}
+
+bindRange(penRange,penVal,v=>penFactor=v);
+bindRange(brushRange,brushVal,v=>brushFactor=v);
+bindRange(handRange,handVal,v=>handFactor=v);
+
+/* =========================
+   畫布
+   ========================= */
+
+const sign=document.getElementById("sign");
+const pen=document.getElementById("pen");
+const brush=document.getElementById("brush");
+const hand=document.getElementById("hand");
+
+const sctx=sign.getContext("2d");
+const pctx=pen.getContext("2d");
+const bctx=brush.getContext("2d");
+const hctx=hand.getContext("2d");
+
+let strokes=[];
+let current=null;
+let drawing=false;
+
+function resize(){
+  sign.width=sign.clientWidth;
+  pen.width=pen.clientWidth;
+  brush.width=brush.clientWidth;
+  hand.width=hand.clientWidth;
+  renderAll();
+}
+window.onresize=resize;
+resize();
+
+function pos(e){
+  const r=sign.getBoundingClientRect();
+  const p=e.touches?e.touches[0]:e;
+  return {x:p.clientX-r.left,y:p.clientY-r.top,t:Date.now()};
+}
+
+sign.onmousedown=e=>{drawing=true;current=[pos(e)];strokes.push(current)};
+sign.onmousemove=e=>{if(!drawing)return;current.push(pos(e));renderAll()};
+window.onmouseup=()=>drawing=false;
+
+sign.ontouchstart=e=>{drawing=true;current=[pos(e)];strokes.push(current)};
+sign.ontouchmove=e=>{e.preventDefault();if(!drawing)return;current.push(pos(e));renderAll()};
+window.ontouchend=()=>drawing=false;
+
+function clearAll(){strokes=[];renderAll()}
+
+function clear(ctx,w,h){ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h)}
+
+function bbox(){
+let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9
+for(const s of strokes)
+for(const p of s){
+minX=Math.min(minX,p.x)
+minY=Math.min(minY,p.y)
+maxX=Math.max(maxX,p.x)
+maxY=Math.max(maxY,p.y)}
+if(minX===1e9)return null
+return{minX,minY,maxX,maxY}
+}
+
+/* =========================
+   筆觸模型（倍率控制）
+   ========================= */
+
+function penWidth(speed){
+const pressure=1/(1+speed*1.2)
+return (0.8+pressure*3.5)*penFactor
+}
+
+function handWidth(){
+return 3.5*handFactor
+}
+
+function brushWidth(i,len){
+const p=i/Math.max(1,len-1)
+return (2+Math.sin(Math.PI*p)*15)*brushFactor
+}
+
+function draw(ctx,canvas,mode){
+clear(ctx,canvas.width,canvas.height)
+const b=bbox();if(!b)return
+const pad=22
+const w=canvas.width-pad*2
+const h=canvas.height-pad*2
+const bw=b.maxX-b.minX
+const bh=b.maxY-b.minY
+const scale=Math.min(w/bw,h/bh)
+const dx=pad-b.minX*scale
+const dy=pad-b.minY*scale
+ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#000"
+for(const s of strokes)
+for(let i=1;i<s.length;i++){
+const p0=s[i-1];const p1=s[i]
+const speed=Math.hypot(p1.x-p0.x,p1.y-p0.y)/Math.max(1,p1.t-p0.t)*18
+let lw
+if(mode==="pen")lw=penWidth(speed)
+else if(mode==="hand")lw=handWidth()
+else lw=brushWidth(i,s.length)
+let minPx=2
+if(mode==="pen")minPx=0.8
+if(mode==="hand")minPx=3
+ctx.lineWidth=Math.max(lw*scale,minPx)
+ctx.beginPath()
+ctx.moveTo(p0.x*scale+dx,p0.y*scale+dy)
+ctx.lineTo(p1.x*scale+dx,p1.y*scale+dy)
+ctx.stroke()
+}
+}
+
+function renderAll(){
+clear(sctx,sign.width,sign.height)
+sctx.strokeStyle="#000";sctx.lineWidth=2
+for(const s of strokes){
+if(s.length<2)continue
+sctx.beginPath()
+sctx.moveTo(s[0].x,s[0].y)
+for(let i=1;i<s.length;i++)sctx.lineTo(s[i].x,s[i].y)
+sctx.stroke()
+}
+draw(pctx,pen,"pen")
+draw(bctx,brush,"brush")
+draw(hctx,hand,"hand")
+}
+
+function download(mode){
+const c=document.createElement("canvas")
+c.width=2400;c.height=1400
+const ctx=c.getContext("2d")
+clear(ctx,c.width,c.height)
+draw(ctx,c,mode)
+const a=document.createElement("a")
+a.href=c.toDataURL()
+a.download="sign.png"
+a.click()
+}
+
+renderAll()
+</script>
+</body>
+</html>
